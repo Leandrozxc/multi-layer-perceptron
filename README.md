@@ -115,6 +115,11 @@ To prevent data leakage:
 │   ├── iris.csv            # 150 samples with CSV header
 │   ├── CsvLoader.cs        # CSV parser into numeric features & labels
 │   └── Preprocessor.cs     # Min-max normalization (train-only fit), one-hot, 60/20/20 split
+├── Libraries/
+│   ├── BackNeural 1.cs     # Backprop engine: forward pass, learning, weight persistence
+│   ├── InputN 1.cs         # Input neurons and input-to-hidden weights
+│   ├── HiddenN 1.cs        # Hidden neurons, error propagation, output weights
+│   └── OuputN 1.cs         # Output activations and biases
 ├── Network/
 │   ├── InputLayer.cs       # Legacy layer source (excluded from compilation)
 │   ├── HiddenLayer.cs      # Legacy layer source (excluded from compilation)
