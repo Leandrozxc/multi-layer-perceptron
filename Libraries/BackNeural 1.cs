@@ -8,8 +8,8 @@ namespace Backprop
 		private INeuron [] ineuron;//approximatelty 3072
 		private HNeuron [] hneuron;// approx 64
 		private ONeuron [] oneuron;//approx 10
-		private double LRPOUT =0.2;//learning rate for the the ouptput layer
-		private double LRPIN = 0.15;// learning rate for the input layer
+		private const double LRPOUT =0.2;//learning rate for the the ouptput layer
+		private const double LRPIN = 0.15;// learning rate for the input layer
 		private double [] errorComponent; // approx 10;
 		private double [] errorDerivative;
 		private double [] desiredout;
@@ -34,30 +34,6 @@ namespace Backprop
 			desiredout=new double[output];
 			createNeurons(ineuron.Length,hneuron.Length,oneuron.Length);
 		}
-        // Configurable construction for reproducible training experiments.
-        // The original constructors retain their defaults and initialization.
-        public NeuralNet(int input, int hidden, int output, int seed)
-            : this(input, hidden, output)
-        {
-            var random = new Random(seed);
-            for (int i = 0; i < input; i++)
-                for (int j = 0; j < hidden; j++)
-                    ineuron[i].setWeight(j, random.Next(-1000, 1000) / 2000.0);
-            for (int j = 0; j < hidden; j++)
-                for (int k = 0; k < output; k++)
-                    hneuron[j].setWeight(k, random.Next(-1000, 1000) / 2000.0);
-        }
-
-        public void SetLearningRates(double inputRate, double outputRate)
-        {
-            if (!double.IsFinite(inputRate) || inputRate <= 0)
-                throw new ArgumentOutOfRangeException(nameof(inputRate));
-            if (!double.IsFinite(outputRate) || outputRate <= 0)
-                throw new ArgumentOutOfRangeException(nameof(outputRate));
-            LRPIN = inputRate;
-            LRPOUT = outputRate;
-        }
-
 		public void createNeurons(int i,int h,int o)
 		{
 			for (int x=0;x<i;x++)
@@ -132,11 +108,10 @@ namespace Backprop
 		}
 		public void calculateDER()
 		{
-			// Negative gradient of mean squared error over the output neurons.
-            // Updates add this value, so errorComponent uses target - output.
+			//calclulate the different derivatives on the output layer
 			for (int x=0;x<oneuron.Length;x++)
 			{
-				errorDerivative[x]=(2.0 / oneuron.Length)*oneuron[x].getOActivation()*(1-(oneuron[x].getOActivation()))*errorComponent[x];
+				errorDerivative[x]=oneuron[x].getOActivation()*(1-(oneuron[x].getOActivation()))*errorComponent[x];
 			}
 		}
 		public void learn()

@@ -78,7 +78,7 @@ $$E = \frac{1}{K}\sum_{k=1}^K (\text{out}_k - \text{target}_k)^2$$
 1. **Output Layer Deltas:**
    $$\delta_k = \frac{2}{K}(\text{out}_k - \text{target}_k) \cdot \text{out}_k \cdot (1 - \text{out}_k)$$
 
-The formulas here use positive loss gradients and subtractive updates. The Backprop engine stores their negatives using `(target - output)` and adds the updates, which is equivalent. The `2 / K` factor makes the gradient match the reported mean squared error.
+The formulas here use positive loss gradients and subtractive updates. The application adapter computes their negatives using `(target - output)` and passes them to the supplied neuron update methods, which add the updates. This is equivalent. The `2 / K` factor makes the gradient match the reported mean squared error.
 
 2. **Hidden Layer Deltas:**
    Computed using the **unmodified (old)** weights of the output layer:
@@ -92,7 +92,9 @@ The formulas here use positive loss gradients and subtractive updates. The Backp
      $$w_{ij} \leftarrow w_{ij} - \eta \cdot \delta_j \cdot \text{in}_i$$
      $$b_j \leftarrow b_j - \eta \cdot \delta_j$$
 
-The engine uses `Backprop.NeuralNet`, `INeuron`, `HNeuron`, and `ONeuron` from `Libraries/`. `Network/NeuralNetwork.cs` adapts prediction and per-sample training to this API. Weights are initialized from integer draws in `[-1000, 1000)` divided by 2000, with hidden/output biases of `0.01`. A seeded constructor makes experiments reproducible. The pipeline's learning rate is applied to both input-to-hidden and hidden-to-output updates; the library's original constructors retain their defaults of `0.15` and `0.2` respectively.
+The application uses the supplied `Backprop.INeuron`, `HNeuron`, and `ONeuron` classes from `Libraries/`. Their source files, together with the supplied `Backprop.NeuralNet` coordinator, are preserved as provided. `Network/NeuralNetwork.cs` coordinates forward propagation and training through the public neuron methods; it does not call `NeuralNet.learn()`.
+
+The adapter initializes weights through the supplied setters using seeded integer draws in `[-1000, 1000)` divided by 2000. Hidden/output biases remain `0.01`, as set by the supplied constructors. It applies the selected learning rate to both connection layers and computes the `2 / K` MSE gradient scaling outside the library. The supplied `NeuralNet` retains its original unseeded initialization and fixed rates of `0.15` and `0.2`; these are not the adapter's experiment settings. Its sigmoid activation rule, including positive saturation, is reproduced by the adapter.
 
 ### Preprocessing & Leak-Free Normalization
 
@@ -116,7 +118,7 @@ To prevent data leakage:
 │   ├── CsvLoader.cs        # CSV parser into numeric features & labels
 │   └── Preprocessor.cs     # Min-max normalization (train-only fit), one-hot, 60/20/20 split
 ├── Libraries/
-│   ├── BackNeural 1.cs     # Backprop engine: forward pass, learning, weight persistence
+│   ├── BackNeural 1.cs     # Supplied coordinator, preserved as provided
 │   ├── InputN 1.cs         # Input neurons and input-to-hidden weights
 │   ├── HiddenN 1.cs        # Hidden neurons, error propagation, output weights
 │   └── OuputN 1.cs         # Output activations and biases
@@ -124,7 +126,7 @@ To prevent data leakage:
 │   ├── InputLayer.cs       # Legacy layer source (excluded from compilation)
 │   ├── HiddenLayer.cs      # Legacy layer source (excluded from compilation)
 │   ├── OutputLayer.cs      # Legacy layer source (excluded from compilation)
-│   └── NeuralNetwork.cs    # Adapter to Backprop engine, sample MSE, argmax predict
+│   └── NeuralNetwork.cs    # Application coordinator using supplied neuron methods
 ├── Training/
 │   └── Trainer.cs          # SGD epoch loop, training logger, SVG generator
 ├── Evaluation/
@@ -140,7 +142,7 @@ To prevent data leakage:
 
 ---
 
-The active neural network engine is in `Libraries/BackNeural 1.cs`, `Libraries/InputN 1.cs`, `Libraries/HiddenN 1.cs`, and `Libraries/OuputN 1.cs`. The three legacy layer files under `Network/` are retained as source references and excluded from the build.
+The supplied library sources are `Libraries/BackNeural 1.cs`, `Libraries/InputN 1.cs`, `Libraries/HiddenN 1.cs`, and `Libraries/OuputN 1.cs`. Experiment-specific coordination lives in `Network/NeuralNetwork.cs`. The three legacy layer files under `Network/` are retained as source references and excluded from the build. Compiler warnings in the supplied library are retained to preserve its source.
 
 ## How to Run
 
