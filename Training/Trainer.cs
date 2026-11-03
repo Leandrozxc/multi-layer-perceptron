@@ -8,16 +8,16 @@ namespace Multi_layer_perceptron.Training;
 /// <summary>
 /// Represents performance metrics recorded for a single training epoch.
 /// </summary>
-public record EpochLog(int Epoch, double TrainLoss, double TestLoss, double TrainAcc, double TestAcc);
+public record EpochLog(int Epoch, double TrainLoss, double ValidationLoss, double TrainAcc, double ValidationAcc);
 
 /// <summary>
 /// Encapsulates the summary of a full training session.
 /// </summary>
 public record TrainingResult(
     double FinalTrainLoss,
-    double FinalTestLoss,
+    double FinalValidationLoss,
     double FinalTrainAcc,
-    double FinalTestAcc,
+    double FinalValidationAcc,
     List<EpochLog> History);
 
 /// <summary>
@@ -31,8 +31,8 @@ public static class Trainer
     /// <param name="net">The neural network to train.</param>
     /// <param name="trainX">Training feature vectors.</param>
     /// <param name="trainY">Training one-hot target vectors.</param>
-    /// <param name="testX">Test feature vectors.</param>
-    /// <param name="testY">Test one-hot target vectors.</param>
+    /// <param name="validationX">Validation feature vectors.</param>
+    /// <param name="validationY">Validation one-hot target vectors.</param>
     /// <param name="lr">Learning rate for weight updates.</param>
     /// <param name="epochs">Total number of epochs to train.</param>
     /// <param name="logEvery">Interval in epochs at which progress is printed to console.</param>
@@ -43,8 +43,8 @@ public static class Trainer
         NeuralNetwork net,
         double[][] trainX,
         double[][] trainY,
-        double[][] testX,
-        double[][] testY,
+        double[][] validationX,
+        double[][] validationY,
         double lr,
         int epochs,
         int logEvery = 100,
@@ -73,20 +73,20 @@ public static class Trainer
             }
             double meanTrainLoss = totalTrainLoss / trainX.Length;
 
-            // Evaluate test loss and accuracies
-            double meanTestLoss = Metrics.MeanSquaredError(net, testX, testY);
+            // Evaluate validation loss and accuracies
+            double meanValidationLoss = Metrics.MeanSquaredError(net, validationX, validationY);
             double trainAcc = Metrics.Accuracy(net, trainX, trainY);
-            double testAcc = Metrics.Accuracy(net, testX, testY);
+            double validationAcc = Metrics.Accuracy(net, validationX, validationY);
 
-            var logEntry = new EpochLog(ep, meanTrainLoss, meanTestLoss, trainAcc, testAcc);
+            var logEntry = new EpochLog(ep, meanTrainLoss, meanValidationLoss, trainAcc, validationAcc);
             history.Add(logEntry);
 
             if (verbose && logEvery > 0 && (ep % logEvery == 0 || ep == epochs))
             {
                 Console.WriteLine(string.Format(
                     CultureInfo.InvariantCulture,
-                    "Epoch {0,4}/{1} | Train Loss: {2:F5} | Test Loss: {3:F5} | Train Acc: {4,5:P1} | Test Acc: {5,5:P1}",
-                    ep, epochs, meanTrainLoss, meanTestLoss, trainAcc, testAcc));
+                    "Epoch {0,4}/{1} | Train Loss: {2:F5} | Validation Loss: {3:F5} | Train Acc: {4,5:P1} | Validation Acc: {5,5:P1}",
+                    ep, epochs, meanTrainLoss, meanValidationLoss, trainAcc, validationAcc));
             }
         }
 
@@ -96,7 +96,7 @@ public static class Trainer
         }
 
         var last = history[^1];
-        return new TrainingResult(last.TrainLoss, last.TestLoss, last.TrainAcc, last.TestAcc, history);
+        return new TrainingResult(last.TrainLoss, last.ValidationLoss, last.TrainAcc, last.ValidationAcc, history);
     }
 
     /// <summary>
@@ -113,18 +113,18 @@ public static class Trainer
         }
 
         using var writer = new StreamWriter(filePath, false, Encoding.UTF8);
-        writer.WriteLine("epoch,train_loss,test_loss,train_acc,test_acc");
+        writer.WriteLine("epoch,train_loss,validation_loss,train_acc,validation_acc");
         foreach (var entry in history)
         {
             writer.WriteLine(string.Format(
                 CultureInfo.InvariantCulture,
                 "{0},{1:F6},{2:F6},{3:F6},{4:F6}",
-                entry.Epoch, entry.TrainLoss, entry.TestLoss, entry.TrainAcc, entry.TestAcc));
+                entry.Epoch, entry.TrainLoss, entry.ValidationLoss, entry.TrainAcc, entry.ValidationAcc));
         }
     }
 
     /// <summary>
-    /// Generates a clean SVG plot of the train and test loss curves without any external libraries.
+    /// Generates a clean SVG plot of the train and validation loss curves without any external libraries.
     /// </summary>
     /// <param name="filePath">Output SVG file path.</param>
     /// <param name="history">List of epoch logs containing loss values.</param>
@@ -142,7 +142,7 @@ public static class Trainer
         int plotWidth = width - padLeft - padRight;
         int plotHeight = height - padTop - padBottom;
 
-        double maxLoss = history.Max(h => Math.Max(h.TrainLoss, h.TestLoss));
+        double maxLoss = history.Max(h => Math.Max(h.TrainLoss, h.ValidationLoss));
         double minLoss = 0.0;
         if (maxLoss <= minLoss) maxLoss = 1.0;
 
@@ -157,14 +157,14 @@ public static class Trainer
         }
 
         var trainPoints = string.Join(" ", history.Select(h => FormatPoint(h.Epoch, h.TrainLoss)));
-        var testPoints = string.Join(" ", history.Select(h => FormatPoint(h.Epoch, h.TestLoss)));
+        var validationPoints = string.Join(" ", history.Select(h => FormatPoint(h.Epoch, h.ValidationLoss)));
 
         var sb = new StringBuilder();
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {width} {height}\" width=\"100%\" height=\"100%\" style=\"background:#ffffff; font-family:sans-serif;\">");
 
         // Title
-        sb.AppendLine($"  <text x=\"{width / 2}\" y=\"30\" text-anchor=\"middle\" font-size=\"16\" font-weight=\"bold\" fill=\"#1e293b\">Iris MLP Training &amp; Test Loss Curve</text>");
+        sb.AppendLine($"  <text x=\"{width / 2}\" y=\"30\" text-anchor=\"middle\" font-size=\"16\" font-weight=\"bold\" fill=\"#1e293b\">Iris MLP Training &amp; Validation Loss Curve</text>");
 
         // Grid lines & Y-axis ticks
         int gridSteps = 5;
@@ -196,7 +196,7 @@ public static class Trainer
 
         // Polylines
         sb.AppendLine($"  <polyline fill=\"none\" stroke=\"#2563eb\" stroke-width=\"2.5\" points=\"{trainPoints}\" />");
-        sb.AppendLine($"  <polyline fill=\"none\" stroke=\"#dc2626\" stroke-width=\"2.5\" stroke-dasharray=\"5,3\" points=\"{testPoints}\" />");
+        sb.AppendLine($"  <polyline fill=\"none\" stroke=\"#dc2626\" stroke-width=\"2.5\" stroke-dasharray=\"5,3\" points=\"{validationPoints}\" />");
 
         // Legend
         int legendX = width - padRight - 220;
@@ -205,7 +205,7 @@ public static class Trainer
         sb.AppendLine($"  <line x1=\"{legendX}\" y1=\"{legendY}\" x2=\"{legendX + 30}\" y2=\"{legendY}\" stroke=\"#2563eb\" stroke-width=\"2.5\" />");
         sb.AppendLine($"  <text x=\"{legendX + 38}\" y=\"{legendY + 4}\" font-size=\"12\" fill=\"#1e293b\">Train Loss</text>");
         sb.AppendLine($"  <line x1=\"{legendX}\" y1=\"{legendY + 22}\" x2=\"{legendX + 30}\" y2=\"{legendY + 22}\" stroke=\"#dc2626\" stroke-width=\"2.5\" stroke-dasharray=\"5,3\" />");
-        sb.AppendLine($"  <text x=\"{legendX + 38}\" y=\"{legendY + 26}\" font-size=\"12\" fill=\"#1e293b\">Test Loss</text>");
+        sb.AppendLine($"  <text x=\"{legendX + 38}\" y=\"{legendY + 26}\" font-size=\"12\" fill=\"#1e293b\">Validation Loss</text>");
 
         sb.AppendLine("</svg>");
 

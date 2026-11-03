@@ -23,7 +23,7 @@ A C# application using the Backprop neural network library for a 3-layer Multila
 - [Final Model Evaluation](#final-model-evaluation)
   - [Confusion Matrix](#confusion-matrix)
   - [Classification Metrics](#classification-metrics)
-  - [Training & Test Loss Curve](#training--test-loss-curve)
+  - [Training & Validation Loss Curve](#training--validation-loss-curve)
 
 ---
 
@@ -41,7 +41,7 @@ A C# application using the Backprop neural network library for a 3-layer Multila
   1. `Iris-setosa` (linearly separable from the other two)
   2. `Iris-versicolor`
   3. `Iris-virginica`
-- **Split Ratio:** 80% train (120 samples) / 20% test (30 samples) with fixed seed `42`.
+- **Split Ratio:** 60% training (90 samples) / 20% validation (30 samples) / 20% testing (30 samples) with fixed seed `42`.
 
 ---
 
@@ -53,7 +53,7 @@ A C# application using the Backprop neural network library for a 3-layer Multila
 [Input Layer: 4 Features]
            │
            ▼
-[Hidden Layer: 8 Neurons (Sigmoid)]
+[Hidden Layer: 4 Neurons (Sigmoid)]
            │
            ▼
 [Output Layer: 3 Neurons (Sigmoid + One-Hot Classes)]
@@ -95,8 +95,8 @@ The engine uses `Backprop.NeuralNet`, `INeuron`, `HNeuron`, and `ONeuron` from `
 ### Preprocessing & Leak-Free Normalization
 
 To prevent data leakage:
-- Min and max bounds for each feature are calculated **strictly from the training partition** ($N = 120$).
-- The test set is normalized using these exact training parameters:
+- Min and max bounds for each feature are calculated **strictly from the training partition** ($N = 90$).
+- The validation and test sets are normalized using these exact training parameters:
   $$x_{\text{norm}} = \frac{x - \min_{\text{train}}}{\max_{\text{train}} - \min_{\text{train}}}$$
 - Targets are one-hot encoded into 3-element vectors:
   - `Iris-setosa` $\rightarrow [1, 0, 0]$
@@ -112,7 +112,7 @@ To prevent data leakage:
 ├── Data/
 │   ├── iris.csv            # 150 samples with CSV header
 │   ├── CsvLoader.cs        # CSV parser into numeric features & labels
-│   └── Preprocessor.cs     # Min-max normalization (train-only fit), one-hot, 80/20 split
+│   └── Preprocessor.cs     # Min-max normalization (train-only fit), one-hot, 60/20/20 split
 ├── Network/
 │   ├── InputLayer.cs       # Legacy layer source (excluded from compilation)
 │   ├── HiddenLayer.cs      # Legacy layer source (excluded from compilation)
@@ -152,7 +152,7 @@ dotnet run -- --xor
 **Output:**
 ```
 Running XOR sanity test (2-4-1, lr 0.5, 5000 epochs)...
-Epoch 5000/5000 | Train Loss: 0.00095 | Test Loss: 0.00095 | Train Acc: 100.0 % | Test Acc: 100.0 %
+Epoch 5000/5000 | Train Loss: 0.00095 | Validation Loss: 0.00095 | Train Acc: 100.0 % | Validation Acc: 100.0 %
 
 Final XOR Loss: 0.000951 (Threshold: < 0.01)
 Input: [0, 0] -> Target: 0, Prediction: 0.0272
@@ -182,20 +182,22 @@ A grid search was executed over 36 configurations:
 
 All results are logged to `tuning_results.csv`.
 
+Configurations are ranked by validation accuracy, then by lower validation MSE on ties. Test metrics are not calculated during the sweep or epoch logging. The selected configuration is retrained on the same 90 training samples with the same seed; validation samples are not added to training.
+
 **Best Configuration Selected:**
-- **Learning Rate:** `0.5`
-- **Hidden Size:** `8`
-- **Epochs:** `500`
-- **Train Loss:** `0.01268`
-- **Test Loss:** `0.00122`
-- **Train Accuracy:** `97.5%`
-- **Test Accuracy:** `100.0%`
+- **Learning Rate:** `0.05`
+- **Hidden Size:** `4`
+- **Epochs:** `1000`
+- **Train Loss:** `0.012776`
+- **Validation Loss:** `0.020460`
+- **Train Accuracy:** `98.9%`
+- **Validation Accuracy:** `96.7%`
 
 ---
 
 ## Final Model Evaluation
 
-Evaluated on the held-out test set ($N = 30$ samples, 20% of dataset).
+Evaluated after model selection on the held-out test set ($N = 30$ samples, 20% of dataset). Final test MSE: `0.006340`.
 
 ### Confusion Matrix
 
@@ -217,12 +219,12 @@ Iris-virginica                     0               0              11
 | **Accuracy** | | | **1.0000 (100%)** | 30 |
 | **Macro Average** | 1.0000 | 1.0000 | 1.0000 | 30 |
 
-### Training & Test Loss Curve
+### Training & Validation Loss Curve
 
 The training history was logged to `training_log.csv` and plotted directly into `loss_curve.svg`:
 
-- **Train Loss:** Decreased overall from `0.228951` to `0.012576`.
-- **Test Loss:** Decreased overall from `0.210582` to `0.001225`.
-- **Final accuracy:** 97.5% training and 100% test. Per-epoch results fluctuate; consult the CSV for the full history.
+- **Train Loss:** Decreased overall from `0.242095` to `0.012776`.
+- **Validation Loss:** Decreased overall from `0.235167` to `0.020460`.
+- **Final accuracy:** 98.9% training, 96.7% validation, and 100% test. Per-epoch results fluctuate; consult the CSV for the full history.
 
-The current experiment selects configurations using the test partition. These results describe that experiment and should not be interpreted as an independent evaluation after model selection.
+The CSV and curve show training and validation metrics only. Test metrics are calculated after the configuration is fixed. The test set contains only 30 samples, so perfect accuracy on this split does not establish perfect performance on new data. This partition was also used in earlier experiments; separating selection now does not make those previously seen samples a completely fresh benchmark.
