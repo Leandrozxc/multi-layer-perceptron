@@ -155,11 +155,11 @@ public static class Metrics
     }
 
     /// <summary>
-    /// Calculates accuracy for a set of samples.
+    /// Calculates accuracy using a 0.5 threshold for one output or argmax for multiple outputs.
     /// </summary>
     /// <param name="net">The neural network model.</param>
     /// <param name="X">Input features.</param>
-    /// <param name="Y">One-hot targets.</param>
+    /// <param name="Y">Binary targets for one output, or one-hot targets for multiple outputs.</param>
     /// <returns>The proportion of correctly classified instances.</returns>
     public static double Accuracy(NeuralNetwork net, double[][] X, double[][] Y)
     {
@@ -167,7 +167,10 @@ public static class Metrics
         int correct = 0;
         for (int i = 0; i < X.Length; i++)
         {
-            if (net.PredictClass(X[i]) == ArgMax(Y[i]))
+            var outputs = net.Predict(X[i]);
+            int predicted = outputs.Length == 1 ? (outputs[0] >= 0.5 ? 1 : 0) : ArgMax(outputs);
+            int actual = outputs.Length == 1 ? (Y[i][0] >= 0.5 ? 1 : 0) : ArgMax(Y[i]);
+            if (predicted == actual)
             {
                 correct++;
             }

@@ -145,7 +145,7 @@ The active neural network engine is in `Libraries/BackNeural 1.cs`, `Libraries/I
 
 ### Running the Sanity Test (XOR)
 
-To verify the backpropagation algorithm on the non-linearly separable XOR problem (2-4-1, $\eta=0.5$, 5000 epochs, target loss $< 0.01$):
+To verify the backpropagation algorithm on the non-linearly separable XOR problem (2-4-1, $\eta=0.5$, 5000 epochs, target loss $< 0.01$ and all four binary predictions correct):
 
 ```bash
 dotnet run -- --xor
@@ -161,9 +161,12 @@ Input: [0, 0] -> Target: 0, Prediction: 0.0161
 Input: [0, 1] -> Target: 1, Prediction: 0.9827
 Input: [1, 0] -> Target: 1, Prediction: 0.9827
 Input: [1, 1] -> Target: 0, Prediction: 0.0216
+Final XOR Accuracy: 100.0% (Threshold: 0.5)
 
 [PASS] XOR sanity test passed successfully!
 ```
+
+Single-output accuracy classifies outputs `>= 0.5` as 1 and lower outputs as 0. XOR succeeds only when MSE is below `0.01` and all four predictions are correct; failure returns exit code 1. Iris continues to use argmax for its three outputs. XOR uses the same four samples for training and validation as a sanity check.
 
 ### Running the End-to-End Iris Pipeline
 

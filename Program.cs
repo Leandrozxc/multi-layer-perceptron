@@ -130,12 +130,15 @@ static void RunXorSanityTest()
         Console.WriteLine($"Input: [{xorX[i][0]}, {xorX[i][1]}] -> Target: {xorY[i][0]}, Prediction: {pred:F4}");
     }
 
-    if (result.FinalTrainLoss < 0.01)
+    double accuracy = Metrics.Accuracy(net, xorX, xorY);
+    Console.WriteLine($"Final XOR Accuracy: {accuracy:P1} (Threshold: 0.5)");
+    if (result.FinalTrainLoss < 0.01 && accuracy == 1.0)
     {
         Console.WriteLine("\n[PASS] XOR sanity test passed successfully!\n");
     }
     else
     {
-        Console.WriteLine("\n[FAIL] XOR sanity test failed!\n");
+        Console.WriteLine("\n[FAIL] XOR sanity test requires loss < 0.01 and all four predictions correct.\n");
+        Environment.ExitCode = 1;
     }
 }
