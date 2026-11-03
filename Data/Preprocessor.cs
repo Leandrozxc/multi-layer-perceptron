@@ -1,107 +1,67 @@
 namespace Multi_layer_perceptron.Data;
 
 /// <summary>
-/// Handles data preprocessing including shuffling, train/test splitting, min-max normalization, and one-hot encoding.
+/// Handles data preprocessing including shuffling, train/validation/test splitting, min-max normalization, and one-hot encoding.
 /// </summary>
 public static class Preprocessor
 {
     /// <summary>
-    /// Shuffles and splits features and labels into training and test sets, applying min-max normalization
-    /// fit solely on the training set to prevent data leakage, and one-hot encoding class labels.
+    /// Creates disjoint seeded training, validation, and test partitions.
+    /// Normalization bounds are fitted exclusively on training features.
     /// </summary>
-    /// <param name="X">The raw feature matrix.</param>
-    /// <param name="labels">The class label strings for each sample.</param>
-    /// <param name="classes">The distinct sorted class labels.</param>
-    /// <param name="trainRatio">The fraction of samples to allocate to the training set (default: 0.8).</param>
-    /// <param name="seed">Random seed for reproducible shuffling.</param>
-    /// <returns>Normalized train features, one-hot train targets, normalized test features, and one-hot test targets.</returns>
-    public static (double[][] trainX, double[][] trainY, double[][] testX, double[][] testY) Split(
-        double[][] X,
-        string[] labels,
-        string[] classes,
-        double trainRatio = 0.8,
-        int seed = 42)
+    /// <param name="X">Raw feature vectors.</param>
+    /// <param name="labels">Class labels corresponding to feature vectors.</param>
+    /// <param name="classes">Class names used for one-hot encoding.</param>
+    /// <param name="trainRatio">Training fraction.</param>
+    /// <param name="validationRatio">Validation fraction.</param>
+    /// <param name="seed">Shuffle seed.</param>
+    /// <returns>Normalized features and one-hot targets for all three partitions.</returns>
+    public static (double[][] trainX, double[][] trainY,
+        double[][] validationX, double[][] validationY, double[][] testX, double[][] testY) Split(
+        double[][] X, string[] labels, string[] classes,
+        double trainRatio = 0.6, double validationRatio = 0.2, int seed = 42)
     {
-        if (X.Length != labels.Length)
-        {
-            throw new ArgumentException("Feature count and label count must match.");
-        }
-
-        int totalSamples = X.Length;
+        if (X.Length != labels.Length || X.Length == 0)
+            throw new ArgumentException("Features and labels must have matching nonzero lengths.");
+        if (!double.IsFinite(trainRatio) || !double.IsFinite(validationRatio) ||
+            trainRatio <= 0 || validationRatio <= 0 || trainRatio + validationRatio >= 1)
+            throw new ArgumentException("Split ratios must leave nonempty training, validation, and test fractions.");
         int featureCount = X[0].Length;
+        if (featureCount == 0 || X.Any(row => row.Length != featureCount))
+            throw new ArgumentException("Feature vectors must have a consistent nonzero width.");
 
-        // 1. Deterministic Fisher-Yates shuffle
-        int[] indices = Enumerable.Range(0, totalSamples).ToArray();
+        int trainCount = (int)Math.Round(X.Length * trainRatio);
+        int validationCount = (int)Math.Round(X.Length * validationRatio);
+        if (trainCount == 0 || validationCount == 0 || trainCount + validationCount >= X.Length)
+            throw new ArgumentException("Each partition must contain at least one sample.");
+
+        int[] indices = Enumerable.Range(0, X.Length).ToArray();
         var rng = new Random(seed);
-        for (int i = totalSamples - 1; i > 0; i--)
+        for (int i = indices.Length - 1; i > 0; i--)
         {
             int j = rng.Next(i + 1);
             (indices[i], indices[j]) = (indices[j], indices[i]);
         }
 
-        // 2. Train / test index partition
-        int trainCount = (int)Math.Round(totalSamples * trainRatio);
-        int testCount = totalSamples - trainCount;
+        var trainingIndices = indices.Take(trainCount).ToArray();
+        var min = Enumerable.Range(0, featureCount)
+            .Select(f => trainingIndices.Min(i => X[i][f])).ToArray();
+        var max = Enumerable.Range(0, featureCount)
+            .Select(f => trainingIndices.Max(i => X[i][f])).ToArray();
 
-        var rawTrainX = new double[trainCount][];
-        var trainY = new double[trainCount][];
-        for (int i = 0; i < trainCount; i++)
+        (double[][] features, double[][] targets) Prepare(IEnumerable<int> partition)
         {
-            int idx = indices[i];
-            rawTrainX[i] = (double[])X[idx].Clone();
-            trainY[i] = OneHotEncode(labels[idx], classes);
+            var rows = partition.ToArray();
+            var features = rows.Select(i => Enumerable.Range(0, featureCount).Select(f =>
+                max[f] - min[f] <= 1e-12 ? 0.0 : (X[i][f] - min[f]) / (max[f] - min[f])).ToArray()).ToArray();
+            var targets = rows.Select(i => OneHotEncode(labels[i], classes)).ToArray();
+            return (features, targets);
         }
 
-        var rawTestX = new double[testCount][];
-        var testY = new double[testCount][];
-        for (int i = 0; i < testCount; i++)
-        {
-            int idx = indices[trainCount + i];
-            rawTestX[i] = (double[])X[idx].Clone();
-            testY[i] = OneHotEncode(labels[idx], classes);
-        }
-
-        // 3. Compute Min and Max on training set ONLY (preventing data leakage)
-        double[] minVals = new double[featureCount];
-        double[] maxVals = new double[featureCount];
-        for (int f = 0; f < featureCount; f++)
-        {
-            double min = double.MaxValue;
-            double max = double.MinValue;
-            for (int i = 0; i < trainCount; i++)
-            {
-                double val = rawTrainX[i][f];
-                if (val < min) min = val;
-                if (val > max) max = val;
-            }
-            minVals[f] = min;
-            maxVals[f] = max;
-        }
-
-        // 4. Normalize both sets with train min/max
-        var trainX = new double[trainCount][];
-        for (int i = 0; i < trainCount; i++)
-        {
-            trainX[i] = new double[featureCount];
-            for (int f = 0; f < featureCount; f++)
-            {
-                double range = maxVals[f] - minVals[f];
-                trainX[i][f] = range > 1e-12 ? (rawTrainX[i][f] - minVals[f]) / range : 0.0;
-            }
-        }
-
-        var testX = new double[testCount][];
-        for (int i = 0; i < testCount; i++)
-        {
-            testX[i] = new double[featureCount];
-            for (int f = 0; f < featureCount; f++)
-            {
-                double range = maxVals[f] - minVals[f];
-                testX[i][f] = range > 1e-12 ? (rawTestX[i][f] - minVals[f]) / range : 0.0;
-            }
-        }
-
-        return (trainX, trainY, testX, testY);
+        var train = Prepare(trainingIndices);
+        var validation = Prepare(indices.Skip(trainCount).Take(validationCount));
+        var test = Prepare(indices.Skip(trainCount + validationCount));
+        return (train.features, train.targets, validation.features, validation.targets, test.features, test.targets);
     }
 
     /// <summary>
