@@ -190,7 +190,7 @@ Configurations are ranked by validation accuracy, then by lower validation MSE o
 - **Learning Rate:** `0.1`
 - **Hidden Size:** `4`
 - **Epochs:** `1000`
-- **Train Loss:** `0.010839`
+- **Train Loss:** `0.010104`
 - **Validation Loss:** `0.020241`
 - **Train Accuracy:** `98.9%`
 - **Validation Accuracy:** `96.7%`
@@ -223,9 +223,9 @@ Iris-virginica                     0               0              11
 
 ### Training & Validation Loss Curve
 
-The training history was logged to `training_log.csv` and plotted directly into `loss_curve.svg`:
+The training history was logged to `training_log.csv` and plotted directly into `loss_curve.svg`. Training and validation MSE are both evaluated after all updates in each epoch, using the same fixed model weights and the same MSE function. Final test MSE uses that function after training:
 
-- **Train Loss:** Decreased overall from `0.240358` to `0.010839`.
+- **Train Loss:** Decreased overall from `0.230856` to `0.010104`.
 - **Validation Loss:** Decreased overall from `0.232095` to `0.020241`.
 - **Final accuracy:** 98.9% training, 96.7% validation, and 100% test. Per-epoch results fluctuate; consult the CSV for the full history.
 

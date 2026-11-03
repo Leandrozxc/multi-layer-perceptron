@@ -65,13 +65,13 @@ public static class Trainer
             }
 
             // Train over each sample
-            double totalTrainLoss = 0.0;
             for (int i = 0; i < indices.Length; i++)
             {
                 int idx = indices[i];
-                totalTrainLoss += net.TrainStep(trainX[idx], trainY[idx], lr);
+                net.TrainStep(trainX[idx], trainY[idx], lr);
             }
-            double meanTrainLoss = totalTrainLoss / trainX.Length;
+            // Evaluate both partitions using the same fixed end-of-epoch weights.
+            double meanTrainLoss = Metrics.MeanSquaredError(net, trainX, trainY);
 
             // Evaluate validation loss and accuracies
             double meanValidationLoss = Metrics.MeanSquaredError(net, validationX, validationY);
