@@ -9,4 +9,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="Network/InputLayer.cs;Network/HiddenLayer.cs;Network/OutputLayer.cs" />
+  </ItemGroup>
+
 </Project>

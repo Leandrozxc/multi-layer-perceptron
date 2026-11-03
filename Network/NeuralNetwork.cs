@@ -1,107 +1,74 @@
+using Backprop;
+
 namespace Multi_layer_perceptron.Network;
 
-/// <summary>
-/// Represents a 3-layer Multilayer Perceptron (Input, Hidden, Output) with backpropagation.
-/// </summary>
+/// <summary>Adapts the Backprop engine to the training and evaluation pipeline.</summary>
 public class NeuralNetwork
 {
-    /// <summary>
-    /// Gets the input layer.
-    /// </summary>
-    public InputLayer Input { get; }
+    private readonly NeuralNet _engine;
+    private readonly int _inputSize;
+    private readonly int _outputSize;
 
-    /// <summary>
-    /// Gets the hidden layer.
-    /// </summary>
-    public HiddenLayer Hidden { get; }
-
-    /// <summary>
-    /// Gets the output layer.
-    /// </summary>
-    public OutputLayer Output { get; }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="NeuralNetwork"/> class.
-    /// Weights are initialized using Xavier uniform distribution with the specified seed.
-    /// </summary>
-    /// <param name="inputSize">The number of input features.</param>
-    /// <param name="hiddenSize">The number of hidden neurons.</param>
-    /// <param name="outputSize">The number of output neurons.</param>
-    /// <param name="seed">Random seed for reproducible initialization.</param>
+    /// <summary>Creates a reproducible three-layer network using Backprop initialization.</summary>
     public NeuralNetwork(int inputSize, int hiddenSize, int outputSize, int seed = 42)
     {
-        var random = new Random(seed);
-        Input = new InputLayer(inputSize);
-        Hidden = new HiddenLayer(inputSize, hiddenSize, random);
-        Output = new OutputLayer(hiddenSize, outputSize, random);
+        _inputSize = inputSize;
+        _outputSize = outputSize;
+        _engine = new NeuralNet(inputSize, hiddenSize, outputSize, seed);
     }
 
-    /// <summary>
-    /// Executes a forward pass and returns the network's output activations.
-    /// </summary>
-    /// <param name="x">The input feature vector.</param>
-    /// <returns>The output predictions.</returns>
+    /// <summary>Runs the engine and returns a snapshot of its output activations.</summary>
     public double[] Predict(double[] x)
     {
-        Input.Values = x;
-        var hiddenOut = Hidden.Forward(x);
-        return Output.Forward(hiddenOut);
+        SetInputs(x);
+        _engine.run();
+        return ReadOutputs();
     }
 
-    /// <summary>
-    /// Performs one training step using stochastic gradient descent on a single sample:
-    /// forward pass, compute deltas, update weights, and return sample mean squared error.
-    /// </summary>
-    /// <param name="x">The input feature vector.</param>
-    /// <param name="target">The expected target vector.</param>
-    /// <param name="lr">The learning rate.</param>
-    /// <returns>The mean squared error (MSE) for this sample.</returns>
+    /// <summary>Trains on one sample and returns its pre-update mean squared error.</summary>
     public double TrainStep(double[] x, double[] target, double lr)
     {
-        // 1. Forward pass
-        Predict(x);
-
-        // 2. Output deltas
-        Output.ComputeDeltas(target);
-
-        // 3. Hidden deltas using the old output weights
-        Hidden.Backward(x, Output);
-
-        // 4. Update weights for both layers
-        Output.UpdateWeights(Hidden.Outputs, lr);
-        Hidden.UpdateWeights(x, lr);
-
-        // 5. Compute and return sample MSE
-        double sumSqErr = 0.0;
-        int kLen = Output.Outputs.Length;
-        for (int k = 0; k < kLen; k++)
+        if (target.Length != _outputSize)
+            throw new ArgumentException("Target size must match the network.", nameof(target));
+        _engine.SetLearningRates(lr, lr);
+        SetInputs(x);
+        for (int k = 0; k < _outputSize; k++)
+            _engine.setDesiredOutput(k, target[k]);
+        _engine.learn();
+        // learn() retains the activations from its forward pass, before updating weights.
+        var outputs = ReadOutputs();
+        double sum = 0;
+        for (int k = 0; k < _outputSize; k++)
         {
-            double diff = Output.Outputs[k] - target[k];
-            sumSqErr += diff * diff;
+            double error = outputs[k] - target[k];
+            sum += error * error;
         }
-
-        return sumSqErr / kLen;
+        return sum / _outputSize;
     }
 
-    /// <summary>
-    /// Predicts the class index with the highest activation (argmax).
-    /// </summary>
-    /// <param name="x">The input feature vector.</param>
-    /// <returns>The zero-based index of the predicted class.</returns>
+    /// <summary>Returns the class index with the highest activation.</summary>
     public int PredictClass(double[] x)
     {
         var outputs = Predict(x);
-        int bestIdx = 0;
-        double maxVal = outputs[0];
-        for (int i = 1; i < outputs.Length; i++)
-        {
-            if (outputs[i] > maxVal)
-            {
-                maxVal = outputs[i];
-                bestIdx = i;
-            }
-        }
-        return bestIdx;
+        int best = 0;
+        for (int k = 1; k < outputs.Length; k++)
+            if (outputs[k] > outputs[best]) best = k;
+        return best;
+    }
+
+    private void SetInputs(double[] x)
+    {
+        if (x.Length != _inputSize)
+            throw new ArgumentException("Input size must match the network.", nameof(x));
+        for (int i = 0; i < _inputSize; i++)
+            _engine.setInputs(i, x[i]);
+    }
+
+    private double[] ReadOutputs()
+    {
+        var outputs = new double[_outputSize];
+        for (int k = 0; k < outputs.Length; k++)
+            outputs[k] = _engine.getOuputData(k);
+        return outputs;
     }
 }
-

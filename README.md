@@ -1,6 +1,6 @@
 # C# Multilayer Perceptron (MLP) From Scratch
 
-A pure C# implementation of a 3-layer Multilayer Perceptron (Input, Hidden, Output) with backpropagation trained using Stochastic Gradient Descent (SGD) on the Fisher's Iris dataset.
+A C# application using the Backprop neural network library for a 3-layer Multilayer Perceptron (Input, Hidden, Output) with backpropagation trained using Stochastic Gradient Descent (SGD) on the Fisher's Iris dataset.
 
 > **Zero external ML libraries:** Built strictly with standard .NET 8 libraries (`System.*`). No ML.NET, TorchSharp, Math.NET, or external dependencies.
 
@@ -90,8 +90,7 @@ $$E = \frac{1}{K}\sum_{k=1}^K (\text{out}_k - \text{target}_k)^2$$
      $$w_{ij} \leftarrow w_{ij} - \eta \cdot \delta_j \cdot \text{in}_i$$
      $$b_j \leftarrow b_j - \eta \cdot \delta_j$$
 
-Weights are initialized using **Xavier uniform initialization**:
-$$W \sim \mathcal{U}\left(-\sqrt{\frac{6}{\text{fan}_{\text{in}} + \text{fan}_{\text{out}}}}, +\sqrt{\frac{6}{\text{fan}_{\text{in}} + \text{fan}_{\text{out}}}}\right)$$
+The engine uses `Backprop.NeuralNet`, `INeuron`, `HNeuron`, and `ONeuron` from `Libraries/`. `Network/NeuralNetwork.cs` adapts prediction and per-sample training to this API. Weights are initialized from integer draws in `[-1000, 1000)` divided by 2000, with hidden/output biases of `0.01`. A seeded constructor makes experiments reproducible. The pipeline's learning rate is applied to both input-to-hidden and hidden-to-output updates; the library's original constructors retain their defaults of `0.15` and `0.2` respectively.
 
 ### Preprocessing & Leak-Free Normalization
 
@@ -115,10 +114,10 @@ To prevent data leakage:
 │   ├── CsvLoader.cs        # CSV parser into numeric features & labels
 │   └── Preprocessor.cs     # Min-max normalization (train-only fit), one-hot, 80/20 split
 ├── Network/
-│   ├── InputLayer.cs       # Stores input features
-│   ├── HiddenLayer.cs      # Weights, biases, sigmoid activation & backward pass
-│   ├── OutputLayer.cs      # Weights, biases, sigmoid activation, deltas & updates
-│   └── NeuralNetwork.cs    # Forward, backward, train step, Xavier init, argmax predict
+│   ├── InputLayer.cs       # Legacy layer source (excluded from compilation)
+│   ├── HiddenLayer.cs      # Legacy layer source (excluded from compilation)
+│   ├── OutputLayer.cs      # Legacy layer source (excluded from compilation)
+│   └── NeuralNetwork.cs    # Adapter to Backprop engine, sample MSE, argmax predict
 ├── Training/
 │   └── Trainer.cs          # SGD epoch loop, training logger, SVG generator
 ├── Evaluation/
@@ -133,6 +132,8 @@ To prevent data leakage:
 ```
 
 ---
+
+The active neural network engine is in `Libraries/BackNeural 1.cs`, `Libraries/InputN 1.cs`, `Libraries/HiddenN 1.cs`, and `Libraries/OuputN 1.cs`. The three legacy layer files under `Network/` are retained as source references and excluded from the build.
 
 ## How to Run
 
@@ -151,13 +152,13 @@ dotnet run -- --xor
 **Output:**
 ```
 Running XOR sanity test (2-4-1, lr 0.5, 5000 epochs)...
-Epoch 5000/5000 | Train Loss: 0.00080 | Test Loss: 0.00080 | Train Acc: 100.0 % | Test Acc: 100.0 %
+Epoch 5000/5000 | Train Loss: 0.00095 | Test Loss: 0.00095 | Train Acc: 100.0 % | Test Acc: 100.0 %
 
-Final XOR Loss: 0.000801 (Threshold: < 0.01)
-Input: [0, 0] -> Target: 0, Prediction: 0.0250
-Input: [0, 1] -> Target: 1, Prediction: 0.9730
-Input: [1, 0] -> Target: 1, Prediction: 0.9737
-Input: [1, 1] -> Target: 0, Prediction: 0.0339
+Final XOR Loss: 0.000951 (Threshold: < 0.01)
+Input: [0, 0] -> Target: 0, Prediction: 0.0272
+Input: [0, 1] -> Target: 1, Prediction: 0.9712
+Input: [1, 0] -> Target: 1, Prediction: 0.9707
+Input: [1, 1] -> Target: 0, Prediction: 0.0371
 
 [PASS] XOR sanity test passed successfully!
 ```
@@ -185,8 +186,8 @@ All results are logged to `tuning_results.csv`.
 - **Learning Rate:** `0.5`
 - **Hidden Size:** `8`
 - **Epochs:** `500`
-- **Train Loss:** `0.01252`
-- **Test Loss:** `0.00119`
+- **Train Loss:** `0.01268`
+- **Test Loss:** `0.00122`
 - **Train Accuracy:** `97.5%`
 - **Test Accuracy:** `100.0%`
 
@@ -220,7 +221,8 @@ Iris-virginica                     0               0              11
 
 The training history was logged to `training_log.csv` and plotted directly into `loss_curve.svg`:
 
-- **Train Loss:** Decreased smoothly from `0.225` down to `0.0125`.
-- **Test Loss:** Decreased smoothly from `0.200` down to `0.00119`.
-- **Generalization:** No overfitting observed; test accuracy remained at 100%.
+- **Train Loss:** Decreased overall from `0.228951` to `0.012576`.
+- **Test Loss:** Decreased overall from `0.210582` to `0.001225`.
+- **Final accuracy:** 97.5% training and 100% test. Per-epoch results fluctuate; consult the CSV for the full history.
 
+The current experiment selects configurations using the test partition. These results describe that experiment and should not be interpreted as an independent evaluation after model selection.
