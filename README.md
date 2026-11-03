@@ -223,3 +223,4 @@ The training history was logged to `training_log.csv` and plotted directly into 
 - **Train Loss:** Decreased smoothly from `0.225` down to `0.0125`.
 - **Test Loss:** Decreased smoothly from `0.200` down to `0.00119`.
 - **Generalization:** No overfitting observed; test accuracy remained at 100%.
+

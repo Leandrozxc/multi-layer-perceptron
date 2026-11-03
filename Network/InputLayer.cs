@@ -19,3 +19,4 @@ public class InputLayer
         Values = new double[size];
     }
 }
+

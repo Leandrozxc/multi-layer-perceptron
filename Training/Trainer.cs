@@ -218,3 +218,4 @@ public static class Trainer
         File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
     }
 }
+
