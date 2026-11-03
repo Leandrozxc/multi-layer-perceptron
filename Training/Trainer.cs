@@ -33,7 +33,6 @@ public static class Trainer
     /// <param name="trainY">Training one-hot target vectors.</param>
     /// <param name="validationX">Validation feature vectors.</param>
     /// <param name="validationY">Validation one-hot target vectors.</param>
-    /// <param name="lr">Learning rate for weight updates.</param>
     /// <param name="epochs">Total number of epochs to train.</param>
     /// <param name="logEvery">Interval in epochs at which progress is printed to console.</param>
     /// <param name="verbose">Whether to print epoch progress to the console.</param>
@@ -45,7 +44,6 @@ public static class Trainer
         double[][] trainY,
         double[][] validationX,
         double[][] validationY,
-        double lr,
         int epochs,
         int logEvery = 100,
         bool verbose = true,
@@ -68,7 +66,7 @@ public static class Trainer
             for (int i = 0; i < indices.Length; i++)
             {
                 int idx = indices[i];
-                net.TrainStep(trainX[idx], trainY[idx], lr);
+                net.TrainStep(trainX[idx], trainY[idx]);
             }
             // Evaluate both partitions using the same fixed end-of-epoch weights.
             double meanTrainLoss = Metrics.MeanSquaredError(net, trainX, trainY);

@@ -1,96 +1,72 @@
 using Backprop;
+using System.Globalization;
 
 namespace Multi_layer_perceptron.Network;
 
-/// <summary>Coordinates the supplied Backprop neuron classes without modifying their source.</summary>
+/// <summary>Adapts the unchanged supplied NeuralNet coordinator to the application.</summary>
 public class NeuralNetwork
 {
-    private readonly INeuron[] _inputs;
-    private readonly HNeuron[] _hidden;
-    private readonly ONeuron[] _outputs;
+    private readonly NeuralNet _engine;
+    private readonly int _inputSize;
+    private readonly int _outputSize;
 
-    /// <summary>Creates a seeded network using the supplied neurons and their weight setters.</summary>
+    /// <summary>Creates a supplied network and loads reproducible initial weights through its public API.</summary>
     public NeuralNetwork(int inputSize, int hiddenSize, int outputSize, int seed = 42)
     {
         if (inputSize <= 0 || hiddenSize <= 0 || outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputSize), "Layer sizes must be positive.");
-        _inputs = Enumerable.Range(0, inputSize).Select(i => new INeuron(i, hiddenSize)).ToArray();
-        _hidden = Enumerable.Range(0, hiddenSize).Select(j => new HNeuron(j, outputSize)).ToArray();
-        _outputs = Enumerable.Range(0, outputSize).Select(k => new ONeuron(k)).ToArray();
+        _inputSize = inputSize;
+        _outputSize = outputSize;
+        _engine = new NeuralNet(inputSize, hiddenSize, outputSize);
         var random = new Random(seed);
-        foreach (var input in _inputs)
-            for (int j = 0; j < hiddenSize; j++)
-                input.setWeight(j, random.Next(-1000, 1000) / 2000.0);
-        foreach (var hidden in _hidden)
-            for (int k = 0; k < outputSize; k++)
-                hidden.setWeight(k, random.Next(-1000, 1000) / 2000.0);
+        // loadWeights expects input weights, hidden weights, hidden biases, output biases.
+        var values = new List<double>();
+        for (int i = 0; i < inputSize * hiddenSize + hiddenSize * outputSize; i++)
+            values.Add(random.Next(-1000, 1000) / 2000.0);
+        values.AddRange(Enumerable.Repeat(0.01, hiddenSize + outputSize));
+        string path = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllLines(path, values.Select(value => value.ToString("R", CultureInfo.CurrentCulture)));
+            _engine.loadWeights(path);
+        }
+        finally { File.Delete(path); }
     }
 
-    /// <summary>Runs forward propagation through the supplied neurons and returns output values.</summary>
+    /// <summary>Returns outputs computed by the supplied coordinator.</summary>
     public double[] Predict(double[] x)
     {
-        if (x.Length != _inputs.Length)
-            throw new ArgumentException("Input size must match the network.", nameof(x));
-        for (int i = 0; i < _inputs.Length; i++)
-            _inputs[i].setInput(x[i]);
-        for (int j = 0; j < _hidden.Length; j++)
-        {
-            double sum = 0;
-            foreach (var input in _inputs)
-                sum += input.getInput() * input.getWeight(j);
-            _hidden[j].setHactivation(Sigmoid(sum + _hidden[j].getBias()));
-        }
-        for (int k = 0; k < _outputs.Length; k++)
-        {
-            double sum = 0;
-            foreach (var hidden in _hidden)
-                sum += hidden.getHactivation() * hidden.getWeight(k);
-            _outputs[k].setOActivation(Sigmoid(sum + _outputs[k].getBias()));
-        }
-        return _outputs.Select(output => output.getOActivation()).ToArray();
+        SetInputs(x);
+        _engine.run();
+        return ReadOutputs();
     }
 
-    /// <summary>Applies one MSE gradient update through the supplied neuron methods.</summary>
-    public double TrainStep(double[] x, double[] target, double lr)
+    /// <summary>Calls the supplied learn method with its fixed rates and returns pre-update MSE.</summary>
+    public double TrainStep(double[] x, double[] target)
     {
-        if (target.Length != _outputs.Length)
+        if (target.Length != _outputSize)
             throw new ArgumentException("Target size must match the network.", nameof(target));
-        if (!double.IsFinite(lr) || lr <= 0)
-            throw new ArgumentOutOfRangeException(nameof(lr));
-        var outputs = Predict(x);
-        var derivatives = new double[outputs.Length];
-        double sum = 0;
-        for (int k = 0; k < outputs.Length; k++)
-        {
-            double error = target[k] - outputs[k];
-            derivatives[k] = (2.0 / outputs.Length) * outputs[k] * (1 - outputs[k]) * error;
-            sum += error * error;
-        }
-        // Compute hidden errors before any output connection weights change.
-        foreach (var hidden in _hidden) hidden.calculateErr(derivatives);
-        foreach (var hidden in _hidden) hidden.setWeight(lr, derivatives);
-        foreach (var input in _inputs)
-            for (int j = 0; j < _hidden.Length; j++)
-                input.setWeight(j, _hidden[j].getErr(), lr);
-        foreach (var output in _outputs) output.changeBias(lr, derivatives);
-        foreach (var hidden in _hidden) hidden.changeBias(lr);
-        return sum / outputs.Length;
+        SetInputs(x);
+        for (int k = 0; k < _outputSize; k++) _engine.setDesiredOutput(k, target[k]);
+        _engine.learn();
+        // learn retains the activations computed before updating weights.
+        return ReadOutputs().Select((value, k) => (value - target[k]) * (value - target[k])).Average();
     }
 
-    /// <summary>Returns the index of the highest output activation.</summary>
+    /// <summary>Returns the class index with the highest activation.</summary>
     public int PredictClass(double[] x)
     {
         var outputs = Predict(x);
         int best = 0;
-        for (int k = 1; k < outputs.Length; k++)
-            if (outputs[k] > outputs[best]) best = k;
+        for (int k = 1; k < outputs.Length; k++) if (outputs[k] > outputs[best]) best = k;
         return best;
     }
 
-    // Match the supplied NeuralNet activation rule, including positive saturation.
-    private static double Sigmoid(double value)
+    private void SetInputs(double[] x)
     {
-        if (value >= 20.0) value = 32;
-        return 1.0 / (1.0 + Math.Exp(-value));
+        if (x.Length != _inputSize) throw new ArgumentException("Input size must match the network.", nameof(x));
+        for (int i = 0; i < _inputSize; i++) _engine.setInputs(i, x[i]);
     }
+
+    private double[] ReadOutputs() => Enumerable.Range(0, _outputSize).Select(_engine.getOuputData).ToArray();
 }

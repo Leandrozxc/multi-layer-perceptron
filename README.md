@@ -61,7 +61,7 @@ A C# application using the Backprop neural network library for a 3-layer Multila
 
 ### Forward Pass & Activation
 
-Standard Sigmoid activation function is used:
+The supplied coordinator uses sigmoid activation with a positive-input saturation rule: preactivation values at least 20 are replaced with 32 before evaluating the formula below. Otherwise, ordinary sigmoid is used:
 $$\sigma(z) = \frac{1}{1 + e^{-z}}$$
 
 For hidden neuron $j$:
@@ -72,29 +72,24 @@ $$\text{out}_k = \sigma\left(\sum_j \text{out}_j \cdot w_{jk} + b_k\right)$$
 
 ### Backpropagation & Weight Updates
 
-Using Mean Squared Error (MSE) loss:
-$$E = \frac{1}{K}\sum_{k=1}^K (\text{out}_k - \text{target}_k)^2$$
+Training calls the supplied `Backprop.NeuralNet.learn()` unchanged. Its optimization objective is half the summed squared output error:
 
-1. **Output Layer Deltas:**
-   $$\delta_k = \frac{2}{K}(\text{out}_k - \text{target}_k) \cdot \text{out}_k \cdot (1 - \text{out}_k)$$
+$$L = \frac{1}{2}\sum_{k=1}^K (\text{out}_k - \text{target}_k)^2$$
 
-The formulas here use positive loss gradients and subtractive updates. The application adapter computes their negatives using `(target - output)` and passes them to the supplied neuron update methods, which add the updates. This is equivalent. The `2 / K` factor makes the gradient match the reported mean squared error.
+It stores negative preactivation gradients:
 
-2. **Hidden Layer Deltas:**
-   Computed using the **unmodified (old)** weights of the output layer:
-   $$\delta_j = \text{out}_j \cdot (1 - \text{out}_j) \sum_k \delta_k \cdot w_{jk}$$
+$$d_k = (\text{target}_k - \text{out}_k)\text{out}_k(1-\text{out}_k)$$
+$$d_j = \text{out}_j(1-\text{out}_j)\sum_k d_k w_{jk}$$
 
-3. **Weight & Bias Updates (Stochastic Gradient Descent):**
-   - Output layer:
-     $$w_{jk} \leftarrow w_{jk} - \eta \cdot \delta_k \cdot \text{out}_j$$
-     $$b_k \leftarrow b_k - \eta \cdot \delta_k$$
-   - Hidden layer:
-     $$w_{ij} \leftarrow w_{ij} - \eta \cdot \delta_j \cdot \text{in}_i$$
-     $$b_j \leftarrow b_j - \eta \cdot \delta_j$$
+Hidden errors are calculated before output weights change. The supplied neuron methods add the corresponding weight and bias updates. Learning rates are fixed by the supplied coordinator: **0.15** for input-to-hidden weights and hidden biases, **0.2** for hidden-to-output weights and output biases.
 
-The application uses the supplied `Backprop.INeuron`, `HNeuron`, and `ONeuron` classes from `Libraries/`. Their source files, together with the supplied `Backprop.NeuralNet` coordinator, are preserved as provided. `Network/NeuralNetwork.cs` coordinates forward propagation and training through the public neuron methods; it does not call `NeuralNet.learn()`.
+The application reports **MSE** for all partitions:
 
-The adapter initializes weights through the supplied setters using seeded integer draws in `[-1000, 1000)` divided by 2000. Hidden/output biases remain `0.01`, as set by the supplied constructors. It applies the selected learning rate to both connection layers and computes the `2 / K` MSE gradient scaling outside the library. The supplied `NeuralNet` retains its original unseeded initialization and fixed rates of `0.15` and `0.2`; these are not the adapter's experiment settings. Its sigmoid activation rule, including positive saturation, is reproduced by the adapter.
+$$\mathrm{MSE} = \frac{1}{K}\sum_{k=1}^K (\text{out}_k - \text{target}_k)^2 = \frac{2}{K}L$$
+
+Thus reporting and optimization objectives differ by a constant scale. The supplied derivative is correct for its half-sum objective; the application does not add MSE gradient scaling or alter the library's learning rule.
+
+All four supplied files under `Libraries/` remain unchanged. `Network/NeuralNetwork.cs` delegates forward propagation to `run()` and training to `learn()`. For reproducibility, it writes seeded initial weights in the supplied persistence format and loads them once through `loadWeights()`, deleting the temporary file afterward. Initial weights are integer draws in `[-1000, 1000)` divided by 2000; hidden and output biases are `0.01`. This uses the coordinator's public API without accessing private fields.
 
 ### Preprocessing & Leak-Free Normalization
 
@@ -126,7 +121,7 @@ To prevent data leakage:
 │   ├── InputLayer.cs       # Legacy layer source (excluded from compilation)
 │   ├── HiddenLayer.cs      # Legacy layer source (excluded from compilation)
 │   ├── OutputLayer.cs      # Legacy layer source (excluded from compilation)
-│   └── NeuralNetwork.cs    # Application coordinator using supplied neuron methods
+│   └── NeuralNetwork.cs    # Adapter calling supplied NeuralNet.run() and learn()
 ├── Training/
 │   └── Trainer.cs          # SGD epoch loop, training logger, SVG generator
 ├── Evaluation/
@@ -134,7 +129,7 @@ To prevent data leakage:
 ├── Program.cs              # CLI runner, XOR sanity test, grid search, evaluation
 ├── Multi-layer perceptron.csproj
 ├── training_log.csv        # Epoch-by-epoch loss & accuracy history
-├── tuning_results.csv      # Hyperparameter sweep logs (36 configurations)
+├── tuning_results.csv      # Hyperparameter sweep logs (9 configurations)
 ├── loss_curve.svg          # Standalone vector graphic of the training loss curve
 ├── .gitignore              # Ignores bin/, obj/, user files
 └── README.md
@@ -142,7 +137,7 @@ To prevent data leakage:
 
 ---
 
-The supplied library sources are `Libraries/BackNeural 1.cs`, `Libraries/InputN 1.cs`, `Libraries/HiddenN 1.cs`, and `Libraries/OuputN 1.cs`. Experiment-specific coordination lives in `Network/NeuralNetwork.cs`. The three legacy layer files under `Network/` are retained as source references and excluded from the build. Compiler warnings in the supplied library are retained to preserve its source.
+The supplied library sources are `Libraries/BackNeural 1.cs`, `Libraries/InputN 1.cs`, `Libraries/HiddenN 1.cs`, and `Libraries/OuputN 1.cs`. Application adaptation lives in `Network/NeuralNetwork.cs`; the supplied coordinator performs forward propagation and learning. The three legacy layer files under `Network/` are retained as source references and excluded from the build. Compiler warnings in the supplied library are retained to preserve its source.
 
 ## How to Run
 
@@ -152,32 +147,17 @@ The supplied library sources are `Libraries/BackNeural 1.cs`, `Libraries/InputN 
 
 ### Running the Sanity Test (XOR)
 
-To verify the backpropagation algorithm on the non-linearly separable XOR problem (2-4-1, $\eta=0.5$, 5000 epochs, target loss $< 0.01$ and all four binary predictions correct):
+The XOR sanity check uses a 2-4-1 network, the supplied fixed rates, seed `42`, and 30,000 epochs. It requires MSE below `0.01` and all four predictions correct at a threshold of `0.5`. Failure returns exit code 1. The same four samples are used for training and validation in this sanity check.
 
 ```bash
 dotnet run -- --xor
 ```
 
-**Output:**
-```
-Running XOR sanity test (2-4-1, lr 0.5, 5000 epochs)...
-Epoch 5000/5000 | Train Loss: 0.00033 | Validation Loss: 0.00033 | Train Acc: 100.0 % | Validation Acc: 100.0 %
-
-Final XOR Loss: 0.000331 (Threshold: < 0.01)
-Input: [0, 0] -> Target: 0, Prediction: 0.0161
-Input: [0, 1] -> Target: 1, Prediction: 0.9827
-Input: [1, 0] -> Target: 1, Prediction: 0.9827
-Input: [1, 1] -> Target: 0, Prediction: 0.0216
-Final XOR Accuracy: 100.0% (Threshold: 0.5)
-
-[PASS] XOR sanity test passed successfully!
-```
-
-Single-output accuracy classifies outputs `>= 0.5` as 1 and lower outputs as 0. XOR succeeds only when MSE is below `0.01` and all four predictions are correct; failure returns exit code 1. Iris continues to use argmax for its three outputs. XOR uses the same four samples for training and validation as a sanity check.
+Recorded result: MSE `0.000295`, accuracy `100%`. Predictions for `[0,0]`, `[0,1]`, `[1,0]`, and `[1,1]` are `0.0156`, `0.9835`, `0.9842`, and `0.0203` respectively. The former 5,000-epoch limit did not converge with these fixed rates; 30,000 epochs allows this deterministic check to pass without changing the library.
 
 ### Running the End-to-End Iris Pipeline
 
-Executes the full pipeline: automated data verification, 36-configuration hyperparameter grid search, retrains the optimal model, exports `training_log.csv` and `loss_curve.svg`, and prints the evaluation report.
+Parses the bundled CSV, prepares the partitions, runs a 9-configuration hidden-size/epoch search, retrains the selected model, exports `training_log.csv` and `loss_curve.svg`, and prints final test metrics. CSV parsing is not a comprehensive dataset validation step.
 
 ```bash
 dotnet run
@@ -187,101 +167,64 @@ dotnet run
 
 ## Hyperparameter Sweep Results
 
-A grid search was executed over 36 configurations:
-- **Learning rate ($\eta$):** `{0.01, 0.05, 0.1, 0.5}`
-- **Hidden layer units ($h$):** `{4, 8, 16}`
-- **Epochs:** `{500, 1000, 2000}`
+The search tests hidden sizes `{4, 8, 16}` and epoch counts `{500, 1000, 2000}`: nine configurations, all recorded in [tuning_results.csv](tuning_results.csv). Configurations use the same seed and split, and are ranked by validation accuracy, then lower validation MSE on ties. Test data is not evaluated during selection or epoch logging. Retraining uses only the same 90 training samples.
 
-All results are logged to `tuning_results.csv`.
+**Learning rates are not tuned:** the unchanged supplied `learn()` method fixes them at input rate `0.15` and output rate `0.2`. This preserves the supplied implementation but does not fulfill the rubric's Excellent-level expectation of experimenting with different learning rates. Hidden size and epoch count are systematically tested.
 
-Configurations are ranked by validation accuracy, then by lower validation MSE on ties. Test metrics are not calculated during the sweep or epoch logging. The selected configuration is retrained on the same 90 training samples with the same seed; validation samples are not added to training.
+| Hidden neurons | Epochs | Train MSE | Validation MSE | Validation accuracy |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 500 | 0.009050 | 0.023030 | 96.7% |
+| 4 | 1000 | 0.005510 | 0.028860 | 93.3% |
+| 4 | 2000 | 0.004001 | 0.043982 | 90.0% |
+| 8 | 500 | 0.009340 | 0.023121 | 96.7% |
+| 8 | 1000 | 0.005550 | 0.028631 | 93.3% |
+| 8 | 2000 | 0.004060 | 0.043972 | 90.0% |
+| 16 | 500 | 0.009548 | 0.023366 | 96.7% |
+| 16 | 1000 | 0.005659 | 0.028255 | 93.3% |
+| 16 | 2000 | 0.004147 | 0.043021 | 90.0% |
 
-**Best Configuration Selected:**
-- **Learning Rate:** `0.1`
-- **Hidden Size:** `4`
-- **Epochs:** `1000`
-- **Train Loss:** `0.010104`
-- **Validation Loss:** `0.020241`
-- **Train Accuracy:** `98.9%`
-- **Validation Accuracy:** `96.7%`
+The selected configuration has **4 hidden neurons and 500 epochs**, training accuracy **98.9%**, validation accuracy **96.7%**, training MSE **0.009050**, and validation MSE **0.023030**. All widths reach the same validation accuracy at 500 epochs. Four neurons has the lowest validation MSE, although the differences between widths are small and do not establish consistent superiority across seeds.
 
----
-
-### Why this configuration was selected
-
-The table below compares selected rows from [the complete 36-configuration sweep](tuning_results.csv). Every configuration uses the same split, normalization procedure, initialization seed, and training-order seed. These are single runs rather than averages across repeated experiments.
-
-| Learning rate | Hidden neurons | Epochs | Train MSE | Validation MSE | Validation accuracy |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 0.01 | 4 | 500 | 0.124245 | 0.127303 | 76.7% |
-| 0.05 | 4 | 1000 | 0.015970 | 0.023129 | 96.7% |
-| 0.1 | 4 | 500 | 0.016066 | 0.024151 | 96.7% |
-| 0.1 | 4 | 1000 | 0.010104 | 0.020241 | 96.7% |
-| 0.1 | 8 | 1000 | 0.010188 | 0.020247 | 96.7% |
-| 0.1 | 16 | 1000 | 0.010346 | 0.020668 | 96.7% |
-| 0.1 | 4 | 2000 | 0.006507 | 0.026270 | 96.7% |
-| 0.5 | 4 | 2000 | 0.002479 | 0.052614 | 86.7% |
-
-The highest recorded validation accuracy is 96.7% (29 of 30 samples). Among configurations reaching that accuracy, learning rate `0.1`, 4 hidden neurons, and 1,000 epochs has the lowest final validation MSE, `0.020241`. This is why the implemented selection rule chooses it; test accuracy does not participate in the decision.
-
-- **Learning rate:** With 4 hidden neurons and 500 epochs, `0.01` reaches only 76.7% validation accuracy, whereas `0.1` reaches 96.7%. The lower rate appears to need more training in this comparison. At the other extreme, `0.5` reaches 100% training accuracy after 2,000 epochs but only 86.7% validation accuracy. Lower training error alone is therefore a poor selection rule.
-- **Hidden size:** At learning rate `0.1` and 1,000 epochs, all three widths reach 96.7% validation accuracy. Four neurons gives validation MSE `0.020241`, versus `0.020247` for eight and `0.020668` for sixteen. The measured advantage over eight is very small; this single run does not establish that four neurons is consistently superior. It is the winner under the stated rule and also uses the smallest tested hidden layer.
-- **Epoch count:** At learning rate `0.1` with 4 hidden neurons, increasing training from 1,000 to 2,000 epochs reduces training MSE from `0.010104` to `0.006507` but increases validation MSE from `0.020241` to `0.026270`, with unchanged validation accuracy. This divergence is consistent with overfitting and supports selecting the earlier tested endpoint for this run.
-
-The configuration is best among the tested grid endpoints under the chosen ranking rule. The experiment does not establish a globally optimal learning rate, width, or epoch count.
-
----
+At four neurons, extending training from 500 to 2,000 epochs reduces training MSE from `0.009050` to `0.004001`, but increases validation MSE from `0.023030` to `0.043982` and reduces validation accuracy from 96.7% to 90.0%. This divergence is consistent with overfitting. The earlier tested endpoint is preferable under the implemented selection rule; this does not establish a globally optimal epoch count.
 
 ## Final Model Evaluation
 
-Evaluated after model selection on the held-out test set ($N = 30$ samples, 20% of dataset). Final test MSE: `0.006164`.
+After model selection, the 30 test samples yield **96.7% accuracy (29 correct)** and **MSE 0.008002**.
 
 ### Confusion Matrix
 
-```
-Actual \ Predicted       Iris-setosa Iris-versicolor  Iris-virginica
---------------------------------------------------------------------
-Iris-setosa                       11               0               0
-Iris-versicolor                    0               8               0
-Iris-virginica                     0               0              11
-```
+Rows are actual classes; columns are predicted classes.
+
+| Actual / Predicted | Setosa | Versicolor | Virginica |
+| --- | ---: | ---: | ---: |
+| Setosa | 11 | 0 | 0 |
+| Versicolor | 0 | 8 | 0 |
+| Virginica | 0 | 1 | 10 |
 
 ### Classification Metrics
 
-| Class | Precision | Recall | F1-Score | Support |
-| :--- | :---: | :---: | :---: | :---: |
-| **Iris-setosa** | 1.0000 | 1.0000 | 1.0000 | 11 |
-| **Iris-versicolor** | 1.0000 | 1.0000 | 1.0000 | 8 |
-| **Iris-virginica** | 1.0000 | 1.0000 | 1.0000 | 11 |
-| **Accuracy** | | | **1.0000 (100%)** | 30 |
-| **Macro Average** | 1.0000 | 1.0000 | 1.0000 | 30 |
+| Class | Precision | Recall | F1 | Support |
+| --- | ---: | ---: | ---: | ---: |
+| Setosa | 1.0000 | 1.0000 | 1.0000 | 11 |
+| Versicolor | 0.8889 | 1.0000 | 0.9412 | 8 |
+| Virginica | 1.0000 | 0.9091 | 0.9524 | 11 |
+| Macro average | 0.9630 | 0.9697 | 0.9645 | 30 |
 
-### What the metrics mean
+One virginica sample is predicted as versicolor, lowering virginica recall and versicolor precision. Setosa has no test errors. These counts do not establish a general pattern of errors across other samples or splits.
 
-The selected model correctly classifies 89 of 90 training samples, 29 of 30 validation samples, and all 30 test samples. The confusion matrix contains no test errors: 11 setosa, 8 versicolor, and 11 virginica samples are classified correctly. Consequently, each class has precision, recall, and F1 of 1.0 on this test partition; the macro averages are also 1.0. There are no test mistakes here to characterize by species.
-
-Test MSE is `0.006164` despite perfect accuracy because sigmoid outputs are not exactly equal to their one-hot targets. Accuracy checks only which output is largest; MSE also measures the distance between output values and targets. These metrics therefore describe different aspects of the predictions. The three sigmoid outputs are not constrained to sum to one and should not be treated as calibrated class probabilities.
+Accuracy uses the largest output, whereas MSE measures distance from one-hot targets. The independent sigmoid outputs do not necessarily sum to one and are not calibrated class probabilities.
 
 ### Training & Validation Loss Curve
 
-The training history was logged to `training_log.csv` and plotted directly into `loss_curve.svg`. Training and validation MSE are both evaluated after all updates in each epoch, using the same fixed model weights and the same MSE function. Final test MSE uses that function after training:
+[training_log.csv](training_log.csv) and [loss_curve.svg](loss_curve.svg) report training and validation metrics after each epoch, using the same fixed model weights and MSE function. Test MSE uses that function only after training.
 
-- **Train Loss:** Decreased overall from `0.230856` to `0.010104`.
-- **Validation Loss:** Decreased overall from `0.232095` to `0.020241`.
-- **Final accuracy:** 98.9% training, 96.7% validation, and 100% test. Per-epoch results fluctuate; consult the CSV for the full history.
-
-The CSV and curve show training and validation metrics only. Test metrics are calculated after the configuration is fixed. The test set contains only 30 samples, so perfect accuracy on this split does not establish perfect performance on new data. This partition was also used in earlier experiments; separating selection now does not make those previously seen samples a completely fresh benchmark.
+Training MSE decreases overall from `0.223984` to `0.009050`; validation MSE goes from `0.224461` to `0.023030`. SGD causes fluctuations, so loss need not decrease every epoch.
 
 ### Learning behavior and limitations
 
-Both loss curves decrease substantially overall, but neither is guaranteed to decrease at every epoch under SGD. Validation MSE reaches its lowest logged value, `0.018753`, at epoch 860, then ends at `0.020241` at epoch 1,000. This shows fluctuations and some late deterioration in validation loss; it does not justify a claim of steadily improving generalization. The sweep compares only the configured endpoints of 500, 1,000, and 2,000 epochs. It does not implement early stopping or select a checkpoint at epoch 860.
-
-Final validation MSE (`0.020241`) is higher than training MSE (`0.010104`), while test MSE (`0.006164`) is lower than both. Different sample difficulty can produce this ordering. It does not prove that the model performs better on unseen populations than on training data.
-
-The conclusions have several limits:
-
-- **Small partitions:** Each validation or test sample changes accuracy by about 3.3 percentage points. The test supports are only 8 to 11 samples per species, so perfect metrics provide limited evidence about future errors.
-- **One split and seed:** Seed `42` makes this experiment reproducible, but it does not measure sensitivity to initialization or partition choice. The shuffled split is not stratified, so class proportions can differ between partitions.
-- **Repeated selection on validation data:** Thirty-six configurations are compared against the same 30 validation samples. The winning validation score can be optimistic. A future study could use stratified cross-validation within development data and report variation across seeds.
-- **Previously observed test samples:** Earlier experiments used this same test partition for tuning. The current pipeline keeps it out of selection, but a stronger future assessment would use genuinely unseen data after fixing the modeling procedure.
-- **Dataset scope:** These results concern Iris flower classification with four measured features. They do not demonstrate performance on other datasets or establish readiness for a real decision-support deployment.
+- These are single runs on one seeded, shuffled 60/20/20 split, not averages across seeds. The split is not stratified.
+- Each validation or test sample changes accuracy by about 3.3 percentage points. Test class supports are only 8 to 11 samples each.
+- Comparing nine configurations on the same validation partition can make the winning validation score optimistic. Future work could use stratified cross-validation within development data.
+- Earlier experiments used these test samples for tuning. The current pipeline excludes them from selection, but a stronger future assessment would use genuinely unseen data after fixing the procedure.
+- The supplied fixed learning rates constrain experimentation. Any learning-rate study would require an approved alternative integration or permission to extend the supplied coordinator.
+- Results concern Iris classification with four features and do not demonstrate performance on other datasets or readiness for real decision-support deployment.
