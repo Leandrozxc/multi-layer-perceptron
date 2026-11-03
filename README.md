@@ -76,7 +76,9 @@ Using Mean Squared Error (MSE) loss:
 $$E = \frac{1}{K}\sum_{k=1}^K (\text{out}_k - \text{target}_k)^2$$
 
 1. **Output Layer Deltas:**
-   $$\delta_k = (\text{out}_k - \text{target}_k) \cdot \text{out}_k \cdot (1 - \text{out}_k)$$
+   $$\delta_k = \frac{2}{K}(\text{out}_k - \text{target}_k) \cdot \text{out}_k \cdot (1 - \text{out}_k)$$
+
+The formulas here use positive loss gradients and subtractive updates. The Backprop engine stores their negatives using `(target - output)` and adds the updates, which is equivalent. The `2 / K` factor makes the gradient match the reported mean squared error.
 
 2. **Hidden Layer Deltas:**
    Computed using the **unmodified (old)** weights of the output layer:
@@ -152,13 +154,13 @@ dotnet run -- --xor
 **Output:**
 ```
 Running XOR sanity test (2-4-1, lr 0.5, 5000 epochs)...
-Epoch 5000/5000 | Train Loss: 0.00095 | Validation Loss: 0.00095 | Train Acc: 100.0 % | Validation Acc: 100.0 %
+Epoch 5000/5000 | Train Loss: 0.00033 | Validation Loss: 0.00033 | Train Acc: 100.0 % | Validation Acc: 100.0 %
 
-Final XOR Loss: 0.000951 (Threshold: < 0.01)
-Input: [0, 0] -> Target: 0, Prediction: 0.0272
-Input: [0, 1] -> Target: 1, Prediction: 0.9712
-Input: [1, 0] -> Target: 1, Prediction: 0.9707
-Input: [1, 1] -> Target: 0, Prediction: 0.0371
+Final XOR Loss: 0.000331 (Threshold: < 0.01)
+Input: [0, 0] -> Target: 0, Prediction: 0.0161
+Input: [0, 1] -> Target: 1, Prediction: 0.9827
+Input: [1, 0] -> Target: 1, Prediction: 0.9827
+Input: [1, 1] -> Target: 0, Prediction: 0.0216
 
 [PASS] XOR sanity test passed successfully!
 ```
@@ -185,11 +187,11 @@ All results are logged to `tuning_results.csv`.
 Configurations are ranked by validation accuracy, then by lower validation MSE on ties. Test metrics are not calculated during the sweep or epoch logging. The selected configuration is retrained on the same 90 training samples with the same seed; validation samples are not added to training.
 
 **Best Configuration Selected:**
-- **Learning Rate:** `0.05`
+- **Learning Rate:** `0.1`
 - **Hidden Size:** `4`
 - **Epochs:** `1000`
-- **Train Loss:** `0.012776`
-- **Validation Loss:** `0.020460`
+- **Train Loss:** `0.010839`
+- **Validation Loss:** `0.020241`
 - **Train Accuracy:** `98.9%`
 - **Validation Accuracy:** `96.7%`
 
@@ -197,7 +199,7 @@ Configurations are ranked by validation accuracy, then by lower validation MSE o
 
 ## Final Model Evaluation
 
-Evaluated after model selection on the held-out test set ($N = 30$ samples, 20% of dataset). Final test MSE: `0.006340`.
+Evaluated after model selection on the held-out test set ($N = 30$ samples, 20% of dataset). Final test MSE: `0.006164`.
 
 ### Confusion Matrix
 
@@ -223,8 +225,8 @@ Iris-virginica                     0               0              11
 
 The training history was logged to `training_log.csv` and plotted directly into `loss_curve.svg`:
 
-- **Train Loss:** Decreased overall from `0.242095` to `0.012776`.
-- **Validation Loss:** Decreased overall from `0.235167` to `0.020460`.
+- **Train Loss:** Decreased overall from `0.240358` to `0.010839`.
+- **Validation Loss:** Decreased overall from `0.232095` to `0.020241`.
 - **Final accuracy:** 98.9% training, 96.7% validation, and 100% test. Per-epoch results fluctuate; consult the CSV for the full history.
 
 The CSV and curve show training and validation metrics only. Test metrics are calculated after the configuration is fixed. The test set contains only 30 samples, so perfect accuracy on this split does not establish perfect performance on new data. This partition was also used in earlier experiments; separating selection now does not make those previously seen samples a completely fresh benchmark.

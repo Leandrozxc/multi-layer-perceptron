@@ -132,10 +132,11 @@ namespace Backprop
 		}
 		public void calculateDER()
 		{
-			//calclulate the different derivatives on the output layer
+			// Negative gradient of mean squared error over the output neurons.
+            // Updates add this value, so errorComponent uses target - output.
 			for (int x=0;x<oneuron.Length;x++)
 			{
-				errorDerivative[x]=oneuron[x].getOActivation()*(1-(oneuron[x].getOActivation()))*errorComponent[x];
+				errorDerivative[x]=(2.0 / oneuron.Length)*oneuron[x].getOActivation()*(1-(oneuron[x].getOActivation()))*errorComponent[x];
 			}
 		}
 		public void learn()
