@@ -200,6 +200,31 @@ Configurations are ranked by validation accuracy, then by lower validation MSE o
 
 ---
 
+### Why this configuration was selected
+
+The table below compares selected rows from [the complete 36-configuration sweep](tuning_results.csv). Every configuration uses the same split, normalization procedure, initialization seed, and training-order seed. These are single runs rather than averages across repeated experiments.
+
+| Learning rate | Hidden neurons | Epochs | Train MSE | Validation MSE | Validation accuracy |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.01 | 4 | 500 | 0.124245 | 0.127303 | 76.7% |
+| 0.05 | 4 | 1000 | 0.015970 | 0.023129 | 96.7% |
+| 0.1 | 4 | 500 | 0.016066 | 0.024151 | 96.7% |
+| 0.1 | 4 | 1000 | 0.010104 | 0.020241 | 96.7% |
+| 0.1 | 8 | 1000 | 0.010188 | 0.020247 | 96.7% |
+| 0.1 | 16 | 1000 | 0.010346 | 0.020668 | 96.7% |
+| 0.1 | 4 | 2000 | 0.006507 | 0.026270 | 96.7% |
+| 0.5 | 4 | 2000 | 0.002479 | 0.052614 | 86.7% |
+
+The highest recorded validation accuracy is 96.7% (29 of 30 samples). Among configurations reaching that accuracy, learning rate `0.1`, 4 hidden neurons, and 1,000 epochs has the lowest final validation MSE, `0.020241`. This is why the implemented selection rule chooses it; test accuracy does not participate in the decision.
+
+- **Learning rate:** With 4 hidden neurons and 500 epochs, `0.01` reaches only 76.7% validation accuracy, whereas `0.1` reaches 96.7%. The lower rate appears to need more training in this comparison. At the other extreme, `0.5` reaches 100% training accuracy after 2,000 epochs but only 86.7% validation accuracy. Lower training error alone is therefore a poor selection rule.
+- **Hidden size:** At learning rate `0.1` and 1,000 epochs, all three widths reach 96.7% validation accuracy. Four neurons gives validation MSE `0.020241`, versus `0.020247` for eight and `0.020668` for sixteen. The measured advantage over eight is very small; this single run does not establish that four neurons is consistently superior. It is the winner under the stated rule and also uses the smallest tested hidden layer.
+- **Epoch count:** At learning rate `0.1` with 4 hidden neurons, increasing training from 1,000 to 2,000 epochs reduces training MSE from `0.010104` to `0.006507` but increases validation MSE from `0.020241` to `0.026270`, with unchanged validation accuracy. This divergence is consistent with overfitting and supports selecting the earlier tested endpoint for this run.
+
+The configuration is best among the tested grid endpoints under the chosen ranking rule. The experiment does not establish a globally optimal learning rate, width, or epoch count.
+
+---
+
 ## Final Model Evaluation
 
 Evaluated after model selection on the held-out test set ($N = 30$ samples, 20% of dataset). Final test MSE: `0.006164`.
@@ -224,6 +249,12 @@ Iris-virginica                     0               0              11
 | **Accuracy** | | | **1.0000 (100%)** | 30 |
 | **Macro Average** | 1.0000 | 1.0000 | 1.0000 | 30 |
 
+### What the metrics mean
+
+The selected model correctly classifies 89 of 90 training samples, 29 of 30 validation samples, and all 30 test samples. The confusion matrix contains no test errors: 11 setosa, 8 versicolor, and 11 virginica samples are classified correctly. Consequently, each class has precision, recall, and F1 of 1.0 on this test partition; the macro averages are also 1.0. There are no test mistakes here to characterize by species.
+
+Test MSE is `0.006164` despite perfect accuracy because sigmoid outputs are not exactly equal to their one-hot targets. Accuracy checks only which output is largest; MSE also measures the distance between output values and targets. These metrics therefore describe different aspects of the predictions. The three sigmoid outputs are not constrained to sum to one and should not be treated as calibrated class probabilities.
+
 ### Training & Validation Loss Curve
 
 The training history was logged to `training_log.csv` and plotted directly into `loss_curve.svg`. Training and validation MSE are both evaluated after all updates in each epoch, using the same fixed model weights and the same MSE function. Final test MSE uses that function after training:
@@ -233,3 +264,17 @@ The training history was logged to `training_log.csv` and plotted directly into 
 - **Final accuracy:** 98.9% training, 96.7% validation, and 100% test. Per-epoch results fluctuate; consult the CSV for the full history.
 
 The CSV and curve show training and validation metrics only. Test metrics are calculated after the configuration is fixed. The test set contains only 30 samples, so perfect accuracy on this split does not establish perfect performance on new data. This partition was also used in earlier experiments; separating selection now does not make those previously seen samples a completely fresh benchmark.
+
+### Learning behavior and limitations
+
+Both loss curves decrease substantially overall, but neither is guaranteed to decrease at every epoch under SGD. Validation MSE reaches its lowest logged value, `0.018753`, at epoch 860, then ends at `0.020241` at epoch 1,000. This shows fluctuations and some late deterioration in validation loss; it does not justify a claim of steadily improving generalization. The sweep compares only the configured endpoints of 500, 1,000, and 2,000 epochs. It does not implement early stopping or select a checkpoint at epoch 860.
+
+Final validation MSE (`0.020241`) is higher than training MSE (`0.010104`), while test MSE (`0.006164`) is lower than both. Different sample difficulty can produce this ordering. It does not prove that the model performs better on unseen populations than on training data.
+
+The conclusions have several limits:
+
+- **Small partitions:** Each validation or test sample changes accuracy by about 3.3 percentage points. The test supports are only 8 to 11 samples per species, so perfect metrics provide limited evidence about future errors.
+- **One split and seed:** Seed `42` makes this experiment reproducible, but it does not measure sensitivity to initialization or partition choice. The shuffled split is not stratified, so class proportions can differ between partitions.
+- **Repeated selection on validation data:** Thirty-six configurations are compared against the same 30 validation samples. The winning validation score can be optimistic. A future study could use stratified cross-validation within development data and report variation across seeds.
+- **Previously observed test samples:** Earlier experiments used this same test partition for tuning. The current pipeline keeps it out of selection, but a stronger future assessment would use genuinely unseen data after fixing the modeling procedure.
+- **Dataset scope:** These results concern Iris flower classification with four measured features. They do not demonstrate performance on other datasets or establish readiness for a real decision-support deployment.
